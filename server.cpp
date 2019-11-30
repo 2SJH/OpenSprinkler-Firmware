@@ -680,8 +680,36 @@ uint16_t parse_listdata(char **p) {
 			break;
 	}
 	tmp_buffer[i]=0;
-	*p = pv+1;
+	if ((*pv) == ','){
+		++pv;   //skip past the comma separator, but pause at brackets and null
+	}
+	*p = pv; 
 	return (uint16_t)atol(tmp_buffer);
+}
+
+bool parse_skip_char(char **p, char ch) {
+	if( **p == ch) {
+		++(*p);
+		return true;
+	}
+	return false;
+}
+
+void parse_skip_other_char(char **p, char ch) {
+	while (**p && **p != ch) {
+		++(*p);
+	}
+}
+
+bool parse_array_start(char **p) {
+	return parse_skip_char(p, '[');
+}
+
+bool parse_array_end(char **p) {
+	parse_skip_other_char(p, ']');
+	bool found = parse_skip_char(p, ']');
+	parse_skip_char(p, ',');
+	return found;
 }
 
 void manual_start_program(byte, byte);
@@ -850,14 +878,18 @@ void server_moveup_program() {
 
 /**
  * Change a program
- * Command: /cp?pw=xxx&pid=x&v=[flag,days0,days1,[start0,start1,start2,start3],[dur0,dur1,dur2..]]&name=x
+ * Command: /cp?pw=xxx&pid=x&v=[flag,days0,days1,thrs,tacc,raineq,[start0,start1,start2,start3],[dur0,dur1,dur2..]]&name=x
  *
  * pw:		password
  * pid:		program index
  * flag:	program flag
+ * thrs:    watering threshold
+ * tacc:    threshold accumulator level
+ * raineq:  rainfall equivalent
  * start?:up to 4 start times
  * dur?:	station water time
  * name:	program name
+ * 
 */
 const char _str_program[] PROGMEM = "Program ";
 void server_change_program() {
@@ -931,19 +963,28 @@ void server_change_program() {
 	prog.days[0]= parse_listdata(&pv);
 	prog.days[1]= parse_listdata(&pv);
 	// parse start times
-	pv++; // this should be a '['
-	for (i=0;i<MAX_NUM_STARTTIMES;i++) {
-		prog.starttimes[i] = parse_listdata(&pv);
+	if (parse_array_start(&pv)) {
+		for (i=0;i<MAX_NUM_STARTTIMES;i++) {
+			prog.starttimes[i] = parse_listdata(&pv);
+		}
+		parse_array_end(&pv);
 	}
-	pv++; // this should be a ','
-	pv++; // this should be a '['
-	for (i=0;i<os.nstations;i++) {
-		uint16_t pre = parse_listdata(&pv);
-		prog.durations[i] = pre;
+	if (parse_array_start(&pv)) {
+		for (i=0;i<os.nstations;i++) {
+			uint16_t pre = parse_listdata(&pv);
+			prog.durations[i] = pre;
+		}
+		parse_array_end(&pv);
 	}
-	pv++; // this should be a ']'
-	pv++; // this should be a ']'
-	// parse program name
+
+	// skip place for program name
+	parse_skip_other_char(&pv, ',');
+	parse_skip_char(&pv, ',');
+
+	prog.threshold = parse_listdata(&pv);
+	prog.accumulated = parse_listdata(&pv);
+	prog.rain_equiv = parse_listdata(&pv);
+
 
 	// i should be equal to os.nstations at this point
 	for(;i<MAX_NUM_STATIONS;i++) {
@@ -1065,15 +1106,17 @@ void server_json_programs_main() {
 		for (i=0; i<os.nstations-1; i++) {
 			bfill.emit_p(PSTR("$L,"),(unsigned long)prog.durations[i]);
 		}
-		bfill.emit_p(PSTR("$L],\""),(unsigned long)prog.durations[i]); // this is the last element
+		bfill.emit_p(PSTR("$L],"),(unsigned long)prog.durations[i]); // this is the last element
 		// program name
 		strncpy(tmp_buffer, prog.name, PROGRAM_NAME_SIZE);
 		tmp_buffer[PROGRAM_NAME_SIZE] = 0;	// make sure the string ends
-		bfill.emit_p(PSTR("$S"), tmp_buffer);
+		bfill.emit_p(PSTR("\"$S\","), tmp_buffer);
+		bfill.emit_p(PSTR("$D,$D,$D"),  prog.threshold, prog.accumulated, prog.rain_equiv);
+
 		if(pid!=pd.nprograms-1) {
-			bfill.emit_p(PSTR("\"],"));
+			bfill.emit_p(PSTR("],"));
 		} else {
-			bfill.emit_p(PSTR("\"]"));
+			bfill.emit_p(PSTR("]"));
 		}
 		// push out a packet if available
 		// buffer size is getting small

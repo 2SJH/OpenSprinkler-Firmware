@@ -1782,7 +1782,7 @@ void OpenSprinkler::switch_httpstation(HTTPStationData *data, bool turnon) {
 void OpenSprinkler::options_setup() {
 
 	// Check reset conditions:
-	if (file_read_byte(IOPTS_FILENAME, IOPT_FW_VERSION)<219 ||	// fw version is invalid (<219)
+	if (file_read_byte(IOPTS_FILENAME, IOPT_FW_VERSION)<220 ||	// fw version is invalid (<220)
 			!file_exists(DONE_FILENAME) ||													// done file doesn't exist
 			file_read_byte(IOPTS_FILENAME, IOPT_RESET)==0xAA)  {	 // reset flag is on
 

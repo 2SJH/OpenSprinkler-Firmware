@@ -82,6 +82,10 @@ public:
 	// monthly:  days[0][0..5] stores the day of the month (32 means last day of month)
 	// interval: days[0] stores the interval (0 to 255), days[1] stores the starting day remainder (0 to 254)
 	byte days[2];  
+
+	uint16_t threshold;      // minimum percentage to water in one session
+	uint16_t accumulated;    // percentage accumulated from previously skipped sessions
+	uint16_t rain_equiv; // mm of rain equivalent to a 1000% watering session
 	
 	// When the program is a fixed start time type:
 	//	 up to MAX_NUM_STARTTIMES fixed start times
