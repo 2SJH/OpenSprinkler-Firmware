@@ -670,6 +670,23 @@ void do_loop()
 				pd.read(pid, &prog);	// todo future: reduce load time
 				if(prog.check_match(curr_time)) {
 					// program match found
+
+					// Find the watering amount
+					// Take the wather adjusted amound and add to any accumulated water debt
+					uint16_t wl = prog.use_weather? os.iopts[IOPT_WATER_PERCENTAGE] : 100;
+					//printf("Acc:%d, wl:%d, thresh:%d\n", prog.accumulated, wl, prog.threshold);
+					wl += prog.accumulated;
+					if (wl > prog.threshold) {
+						// threshold met. Water by the total, and reset the accumulation
+						prog.accumulated = 0;
+					}
+					else {
+						// threshold not met. only add to accumulation and don't water
+						prog.accumulated = wl;
+						wl = 0;
+					}
+					pd.modify(pid, &prog);
+
 					// process all selected stations
 					for(sid=0;sid<os.nstations;sid++) {
 						bid=sid>>3;
@@ -682,13 +699,11 @@ void do_loop()
 						if (prog.durations[sid] && !(os.attrib_dis[bid]&(1<<s))) {
 							// water time is scaled by watering percentage
 							ulong water_time = water_time_resolve(prog.durations[sid]);
-							// if the program is set to use weather scaling
-							if (prog.use_weather) {
-								byte wl = os.iopts[IOPT_WATER_PERCENTAGE];
-								water_time = water_time * wl / 100;
-								if (wl < 20 && water_time < 10) // if water_percentage is less than 20% and water_time is less than 10 seconds
-																								// do not water
-									water_time = 0;
+							water_time = water_time * wl / 100;
+							if (wl < 20 && water_time < 10) {
+								// if water_percentage is less than 20% and water_time is less than 10 seconds
+																							// do not water
+								water_time = 0;
 							}
 
 							if (water_time) {
